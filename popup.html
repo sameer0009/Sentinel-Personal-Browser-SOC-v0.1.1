@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { width: 320px; font-family: -apple-system, "Segoe UI", Roboto, sans-serif;
+         background: #0b1220; color: #e2e8f0; font-size: 13px; }
+  .head { padding: 14px 16px 10px; display: flex; align-items: center; gap: 10px;
+          border-bottom: 1px solid #1e293b; }
+  .head img { width: 28px; height: 28px; }
+  .head h1 { font-size: 14px; letter-spacing: .5px; }
+  .head h1 span { color: #38bdf8; }
+  .score-row { display: flex; align-items: center; gap: 14px; padding: 14px 16px; }
+  .ring { position: relative; width: 74px; height: 74px; flex: none; }
+  .ring svg { transform: rotate(-90deg); }
+  .ring .val { position: absolute; inset: 0; display: flex; flex-direction: column;
+               align-items: center; justify-content: center; }
+  .ring .val b { font-size: 20px; }
+  .ring .val small { font-size: 10px; color: #94a3b8; }
+  .meta { flex: 1; }
+  .meta .row { display: flex; justify-content: space-between; padding: 3px 0; color: #94a3b8; }
+  .meta .row b { color: #e2e8f0; font-weight: 600; }
+  .sec-title { padding: 8px 16px 4px; font-size: 11px; text-transform: uppercase;
+               letter-spacing: 1px; color: #64748b; }
+  #alerts { max-height: 190px; overflow-y: auto; padding: 0 8px; }
+  .alert { background: #111c30; border: 1px solid #1e293b; border-left: 3px solid #64748b;
+           border-radius: 6px; padding: 8px 10px; margin: 6px 8px; }
+  .alert.s4 { border-left-color: #ef4444; } .alert.s3 { border-left-color: #f59e0b; }
+  .alert.s2 { border-left-color: #38bdf8; } .alert.s1 { border-left-color: #64748b; }
+  .alert .t { font-weight: 600; font-size: 12px; margin-bottom: 2px; }
+  .alert .d { color: #94a3b8; font-size: 11px; }
+  .alert .when { color: #475569; font-size: 10px; margin-top: 4px; }
+  .empty { padding: 14px 16px; color: #475569; font-size: 12px; text-align: center; }
+  .foot { padding: 12px 16px 14px; }
+  button { width: 100%; padding: 10px; border: none; border-radius: 8px; cursor: pointer;
+           background: linear-gradient(135deg, #0ea5e9, #6366f1); color: #fff;
+           font-weight: 700; font-size: 13px; letter-spacing: .3px; }
+  button:hover { filter: brightness(1.1); }
+</style>
+</head>
+<body>
+  <div class="head">
+    <img id="logo" alt="Sentinel">
+    <div>
+      <h1>SENTINEL <span>SOC</span></h1>
+      <div style="font-size:10px;color:#64748b;letter-spacing:0.5px">by dev-hunters studio</div>
+    </div>
+  </div>
+  <div class="score-row">
+    <div class="ring">
+      <svg width="74" height="74" viewBox="0 0 74 74">
+        <circle cx="37" cy="37" r="31" fill="none" stroke="#1e293b" stroke-width="7"/>
+        <circle id="arc" cx="37" cy="37" r="31" fill="none" stroke="#38bdf8"
+                stroke-width="7" stroke-linecap="round" stroke-dasharray="194.8" stroke-dashoffset="194.8"/>
+      </svg>
+      <div class="val"><b id="scoreNum">–</b><small id="grade">SCORE</small></div>
+    </div>
+    <div class="meta">
+      <div class="row"><span>Open alerts</span><b id="mAlerts">–</b></div>
+      <div class="row"><span>Trackers blocked</span><b id="mTrackers">–</b></div>
+      <div class="row"><span>Sites profiled</span><b id="mSites">–</b></div>
+    </div>
+  </div>
+  <div class="sec-title">Latest alerts</div>
+  <div id="alerts"></div>
+  <div class="foot"><button id="openConsole">Open SOC Console</button></div>
+  <script src="popup.js"></script>
+</body>
+</html>

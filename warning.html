@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Sentinel SOC — Threat Blocked</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, "Segoe UI", Roboto, sans-serif; background: #0b1220;
+         color: #e2e8f0; min-height: 100vh; display: flex; align-items: center;
+         justify-content: center; padding: 24px; }
+  .card { max-width: 560px; width: 100%; background: #111c30; border: 1px solid #7f1d1d;
+          border-radius: 14px; padding: 36px; text-align: center;
+          box-shadow: 0 0 60px rgba(239, 68, 68, .15); }
+  .shield { font-size: 52px; margin-bottom: 12px; }
+  h1 { font-size: 22px; margin-bottom: 6px; }
+  h1 span { color: #ef4444; }
+  .sub { color: #94a3b8; font-size: 13px; margin-bottom: 20px; }
+  .target { background: #0b1220; border: 1px solid #1e293b; border-radius: 8px;
+            padding: 12px; font-family: ui-monospace, monospace; font-size: 12px;
+            color: #fca5a5; word-break: break-all; margin-bottom: 12px; }
+  .reason { color: #cbd5e1; font-size: 13px; margin-bottom: 24px; line-height: 1.5; }
+  .btns { display: flex; gap: 12px; justify-content: center; }
+  button { padding: 12px 26px; border: none; border-radius: 8px; font-size: 14px;
+           font-weight: 700; cursor: pointer; }
+  #back { background: linear-gradient(135deg, #0ea5e9, #6366f1); color: #fff; }
+  #proceed { background: transparent; color: #94a3b8; border: 1px solid #334155; }
+  #back:hover { filter: brightness(1.1); }
+  #proceed:hover { color: #e2e8f0; border-color: #64748b; }
+  .note { margin-top: 18px; font-size: 11px; color: #475569; }
+</style>
+</head>
+<body>
+  <div class="card">
+    <div class="shield">🛡️</div>
+    <h1><span>THREAT BLOCKED</span> by Sentinel SOC</h1>
+    <p class="sub">Automatic response · severity 4 · M1 threat-intel match</p>
+    <div class="target" id="target">…</div>
+    <p class="reason" id="reason">…</p>
+    <div class="btns">
+      <button id="back">← Go back to safety</button>
+      <button id="proceed">Proceed anyway</button>
+    </div>
+    <p class="note">Proceeding whitelists this domain in Sentinel and is logged to your SOC timeline.</p>
+  </div>
+  <script src="warning.js"></script>
+</body>
+</html>
