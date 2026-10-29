@@ -7,83 +7,6 @@ const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c =>
 const OPEN = ['new', 'ack', 'investigating'];
 const CIRC = 2 * Math.PI * 62;
 
-// Standalone preview fallback (when viewed outside extension context, e.g. local browser or screenshot tools)
-if (typeof chrome === 'undefined' || !chrome.storage || !chrome.storage.local) {
-  const MOCK_TIME = Date.now();
-  window.chrome = window.chrome || {};
-  chrome.runtime = chrome.runtime || {
-    getURL: (path) => path.replace(/^\//, '')
-  };
-  chrome.storage = chrome.storage || {
-    local: {
-      get: async () => ({
-        stats: { installedAt: MOCK_TIME - 7 * 86400000, trackersBlockedTotal: 142 },
-        settings: { phishingDetection: true, autoBlock: true, notifications: true, trackerBlocking: true },
-        whitelist: ['my-internal-dev.example'],
-        scoreHistory: [
-          { ts: MOCK_TIME - 6 * 86400000, score: 98 },
-          { ts: MOCK_TIME - 5 * 86400000, score: 95 },
-          { ts: MOCK_TIME - 4 * 86400000, score: 91 },
-          { ts: MOCK_TIME - 3 * 86400000, score: 87 },
-          { ts: MOCK_TIME - 2 * 86400000, score: 88 },
-          { ts: MOCK_TIME - 1 * 86400000, score: 84 },
-          { ts: MOCK_TIME, score: 84 }
-        ],
-        alerts: [
-          {
-            id: 'alt-1', ts: MOCK_TIME - 12 * 60000, severity: 4, confidence: 'high', module: 'M1',
-            title: 'Threat-listed domain visited: paypal-secure-login.test',
-            detail: 'Matched the local threat-intel list (Sentinel sample threat list). Warning interstitial shown.',
-            url: 'https://paypal-secure-login.test/auth/signin?target=account',
-            domain: 'paypal-secure-login.test', status: 'new', occurrences: 1
-          },
-          {
-            id: 'alt-2', ts: MOCK_TIME - 45 * 60000, severity: 3, confidence: 'medium', module: 'M1',
-            title: 'Possible typosquat of paypal.com: paypa1.com',
-            detail: 'This domain is one character off paypal.com. Treat logins and downloads here as hostile until verified.',
-            url: 'http://paypa1.com/login',
-            domain: 'paypa1.com', status: 'ack', occurrences: 2
-          },
-          {
-            id: 'alt-3', ts: MOCK_TIME - 95 * 60000, severity: 3, confidence: 'high', module: 'M3',
-            title: 'Password field on unencrypted HTTP page: insecure-login.example',
-            detail: 'Credentials entered here travel in cleartext. Do not log in on this page.',
-            url: 'http://insecure-login.example/portal',
-            domain: 'insecure-login.example', status: 'investigating', occurrences: 1
-          },
-          {
-            id: 'alt-4', ts: MOCK_TIME - 180 * 60000, severity: 2, confidence: 'medium', module: 'M5',
-            title: 'Possible browser fingerprinting on tracker-network.example',
-            detail: 'Canvas read-back (toDataURL) after text rendering detected — a common fingerprinting pattern.',
-            url: 'https://tracker-network.example/ad-frame.html',
-            domain: 'tracker-network.example', status: 'resolved', occurrences: 3
-          }
-        ],
-        events: [
-          { id: 'ev-1', ts: MOCK_TIME - 2 * 60000, type: 'ALERT', detail: 'Threat-listed domain visited: paypal-secure-login.test', domain: 'paypal-secure-login.test', severity: 4 },
-          { id: 'ev-2', ts: MOCK_TIME - 3 * 60000, type: 'RESPONSE', detail: 'Analyst inspected block warning on paypal-secure-login.test', domain: 'paypal-secure-login.test', severity: 4 },
-          { id: 'ev-3', ts: MOCK_TIME - 15 * 60000, type: 'FORM', detail: 'Login form detected (1 password field)', domain: 'paypa1.com' },
-          { id: 'ev-4', ts: MOCK_TIME - 25 * 60000, type: 'NAV', detail: 'HTTPS visit', domain: 'github.com' },
-          { id: 'ev-5', ts: MOCK_TIME - 35 * 60000, type: 'HYGIENE', detail: 'HSTS now observed on github.com', domain: 'github.com' },
-          { id: 'ev-6', ts: MOCK_TIME - 50 * 60000, type: 'TRIAGE', detail: 'Alert ack: Possible typosquat of paypal.com: paypa1.com', domain: 'paypa1.com', severity: 3 },
-          { id: 'ev-7', ts: MOCK_TIME - 75 * 60000, type: 'CHAIN', detail: 'Redirect chain of 4 hops', domain: 'ad-click-tracker.example' },
-          { id: 'ev-8', ts: MOCK_TIME - 110 * 60000, type: 'SYS', detail: 'Daily snapshot: security score 84', severity: 1 }
-        ],
-        sites: {
-          'github.com': { domain: 'github.com', visits: 48, httpsVisits: 48, trackersSeen: 0, trackersBlocked: 0, alerts: 0, hsts: true, fingerprinting: false, lastSeen: MOCK_TIME - 20 * 60000 },
-          'google.com': { domain: 'google.com', visits: 62, httpsVisits: 62, trackersSeen: 14, trackersBlocked: 14, alerts: 0, hsts: true, fingerprinting: false, lastSeen: MOCK_TIME - 15 * 60000 },
-          'paypa1.com': { domain: 'paypa1.com', visits: 3, httpsVisits: 0, trackersSeen: 2, trackersBlocked: 2, alerts: 1, hsts: false, fingerprinting: false, lastSeen: MOCK_TIME - 45 * 60000 },
-          'paypal-secure-login.test': { domain: 'paypal-secure-login.test', visits: 1, httpsVisits: 1, trackersSeen: 0, trackersBlocked: 0, alerts: 1, hsts: false, fingerprinting: false, lastSeen: MOCK_TIME - 12 * 60000 },
-          'tracker-network.example': { domain: 'tracker-network.example', visits: 5, httpsVisits: 5, trackersSeen: 18, trackersBlocked: 18, alerts: 1, hsts: true, fingerprinting: true, lastSeen: MOCK_TIME - 180 * 60000 }
-        }
-      }),
-      set: async () => {},
-      clear: async () => {}
-    },
-    onChanged: { addListener: () => {} }
-  };
-}
-
 let STORE = null;
 let DATA = { threatlist: { domains: [] }, brands: {}, popular: [] };
 let curTab = (location.hash ? location.hash.replace('#', '') : '') || 'overview';
@@ -132,6 +55,7 @@ async function refresh() {
   STORE = await chrome.storage.local.get(null);
   STORE.alerts = STORE.alerts || []; STORE.events = STORE.events || [];
   STORE.sites = STORE.sites || {}; STORE.whitelist = STORE.whitelist || [];
+  STORE.blocklist = STORE.blocklist || [];
   STORE.settings = STORE.settings || {};
   STORE.stats = STORE.stats || {}; STORE.scoreHistory = STORE.scoreHistory || [];
   try {
@@ -178,7 +102,18 @@ function renderOverview() {
         <polyline points="${pts}" fill="none" stroke="${col}" stroke-width="2.5"/></svg></div>`;
   }
 
-  $('tab-overview').innerHTML = `
+  const welcome = STORE.onboarded ? '' : `
+    <div class="panel" id="welcome"><h3>Welcome to Sentinel — what it monitors</h3>
+      <p style="color:var(--mut);font-size:13px;line-height:1.6;margin-bottom:10px">
+      To detect threats, Sentinel looks at the addresses of pages you visit, whether pages contain
+      password fields (never what you type), security headers, tracker requests, and canvas
+      fingerprinting attempts. <b>All of this is stored only on this device</b> in extension storage —
+      nothing is sent to dev-hunters studio or anyone else. You can turn modules off, export, or
+      erase everything in <b>Settings</b>.</p>
+      <button class="btn primary" id="welcomeOk">Got it</button>
+    </div>`;
+
+  $('tab-overview').innerHTML = welcome + `
     <div class="panel"><div class="score-wrap">
       <div class="ring">
         <svg width="150" height="150" viewBox="0 0 150 150">
@@ -210,6 +145,14 @@ function renderOverview() {
       <div class="spark">${buckets.map(b =>
         `<div style="height:${Math.max(4, b / max * 100)}%" title="${b} events"></div>`).join('')}</div>
     </div>`;
+
+  if (!STORE.onboarded) {
+    $('welcomeOk').addEventListener('click', async () => {
+      STORE.onboarded = true;
+      await chrome.storage.local.set({ onboarded: true });
+      render();
+    });
+  }
 }
 
 /* -------------------------------- FEED --------------------------------- */
@@ -390,6 +333,9 @@ function runIntelLookup(input) {
   if (DATA.threatlist.domains.includes(domain) || DATA.threatlist.domains.includes(host)) {
     verdict = 'bad'; headline = `${domain} is on the Sentinel threat list.`;
     findings.push('Exact match in the local threat-intel list — treat as hostile.');
+  } else if (STORE.blocklist.includes(domain) || STORE.blocklist.includes(host)) {
+    verdict = 'bad'; headline = `${domain} is on your blocklist.`;
+    findings.push('Exact match in your personal blocklist — treat as hostile.');
   }
   if (/(^|\.)xn--/.test(host)) {
     if (verdict === 'good') verdict = 'warn';
@@ -496,7 +442,7 @@ function renderReports() {
     download(`sentinel-dossier-${new Date().toISOString().slice(0, 10)}.json`,
       JSON.stringify({ exportedAt: new Date().toISOString(), score: sc,
         alerts: STORE.alerts, events: STORE.events, sites: STORE.sites,
-        whitelist: STORE.whitelist, scoreHistory: STORE.scoreHistory }, null, 2),
+        whitelist: STORE.whitelist, blocklist: STORE.blocklist, scoreHistory: STORE.scoreHistory }, null, 2),
       'application/json');
   });
   $('expCsv').addEventListener('click', () => {
@@ -541,16 +487,20 @@ function renderSettings() {
         `<span class="tag mono">${esc(d)} <a href="#" data-wl="${esc(d)}" style="color:var(--s4)">✕</a></span>`).join(' ')
         : '<span style="color:var(--faint);font-size:13px">Empty.</span>'}</div>
     </div>
-    <div class="panel"><h3>Threat intel</h3>
+    <div class="panel"><h3>Threat intel <span class="hint">— your blocklist triggers the severity-4 warning page</span></h3>
+      <div class="toolbar"><input type="text" id="blInput" placeholder="domain, e.g. bad-site.example" style="min-width:200px">
+        <button class="btn" id="blAdd">Add</button></div>
+      <div style="margin-bottom:12px">${STORE.blocklist.length ? STORE.blocklist.map(d =>
+        `<span class="tag mono">${esc(d)} <a href="#" data-bl="${esc(d)}" style="color:var(--s4)">✕</a></span>`).join(' ')
+        : '<span style="color:var(--faint);font-size:13px">Empty.</span>'}</div>
       <p style="color:var(--mut);font-size:13px;line-height:1.6">
-        Local list: <b>${DATA.threatlist.name || 'Sentinel sample list'}</b> ·
-        ${DATA.threatlist.domains.length} domains · updated ${esc(DATA.threatlist.updated || 'n/a')}.<br>
-        Brand map: ${Object.keys(DATA.brands).length} brands · Typosquat reference: ${DATA.popular.length} popular domains.<br>
-        <span style="color:var(--faint)">Edit <span class="mono">data/threatlist.json</span> and reload the extension to use a real feed.</span></p>
+        Built-in list: <b>${esc(DATA.threatlist.name || 'Sentinel sample list')}</b> ·
+        ${DATA.threatlist.domains.length} sample domains on reserved test TLDs · updated ${esc(DATA.threatlist.updated || 'n/a')}.<br>
+        Brand map: ${Object.keys(DATA.brands).length} brands · Typosquat reference: ${DATA.popular.length} popular domains.</p>
     </div>
     <div class="panel"><h3 style="color:#fca5a5">Danger zone</h3>
       <button class="btn danger" id="wipe">Erase all Sentinel data</button>
-      <span style="color:var(--faint);font-size:12px;margin-left:8px">alerts, events, dossiers, whitelist, score history</span>
+      <span style="color:var(--faint);font-size:12px;margin-left:8px">alerts, events, dossiers, whitelist, blocklist, score history</span>
     </div>`;
 
   document.querySelectorAll('#tab-settings [data-set]').forEach(cb =>
@@ -573,6 +523,20 @@ function renderSettings() {
     await chrome.storage.local.set({ whitelist: STORE.whitelist });
     renderSettings();
   });
+  $('blAdd').addEventListener('click', async () => {
+    const v = $('blInput').value.trim().toLowerCase().replace(/^https?:\/\//, '').split('/')[0];
+    if (!v) return;
+    if (!STORE.blocklist.includes(v)) STORE.blocklist.push(v);
+    await chrome.storage.local.set({ blocklist: STORE.blocklist });
+    renderSettings();
+  });
+  document.querySelectorAll('#tab-settings [data-bl]').forEach(a =>
+    a.addEventListener('click', async (e) => {
+      e.preventDefault();
+      STORE.blocklist = STORE.blocklist.filter(d => d !== a.dataset.bl);
+      await chrome.storage.local.set({ blocklist: STORE.blocklist });
+      renderSettings();
+    }));
   document.querySelectorAll('#tab-settings [data-wl]').forEach(a =>
     a.addEventListener('click', async (e) => {
       e.preventDefault();
@@ -626,4 +590,5 @@ chrome.storage.onChanged.addListener(() => {
 });
 
 $('logo').src = chrome.runtime.getURL('icons/icon48.png');
+$('ver').textContent = chrome.runtime.getManifest().version;
 refresh();

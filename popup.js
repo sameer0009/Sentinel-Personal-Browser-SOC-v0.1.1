@@ -2,27 +2,7 @@
 'use strict';
 
 const $ = (id) => document.getElementById(id);
-if (typeof chrome === 'undefined' || !chrome.storage || !chrome.storage.local) {
-  const MOCK_TIME = Date.now();
-  window.chrome = window.chrome || {};
-  chrome.runtime = chrome.runtime || {
-    getURL: (p) => p.replace(/^\//, ''),
-    sendMessage: async () => ({ score: 84, grade: 'B' })
-  };
-  chrome.storage = chrome.storage || {
-    local: {
-      get: async () => ({
-        stats: { trackersBlockedTotal: 142 },
-        sites: { 'github.com': {}, 'google.com': {}, 'paypa1.com': {}, 'paypal-secure-login.test': {}, 'tracker-network.example': {} },
-        alerts: [
-          { severity: 4, title: 'Threat-listed domain visited: paypal-secure-login.test', domain: 'paypal-secure-login.test', status: 'new', ts: MOCK_TIME - 12 * 60000, occurrences: 1 },
-          { severity: 3, title: 'Possible typosquat of paypal.com: paypa1.com', domain: 'paypa1.com', status: 'ack', ts: MOCK_TIME - 45 * 60000, occurrences: 2 },
-          { severity: 3, title: 'Password field on unencrypted HTTP page: insecure-login.example', domain: 'insecure-login.example', status: 'investigating', ts: MOCK_TIME - 95 * 60000, occurrences: 1 }
-        ]
-      })
-    }
-  };
-}
+const CIRC = 2 * Math.PI * 31; // matches the r=31 ring in popup.html
 
 function timeAgo(ts) {
   const s = Math.floor((Date.now() - ts) / 1000);

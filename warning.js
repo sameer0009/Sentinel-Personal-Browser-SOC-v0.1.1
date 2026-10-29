@@ -2,11 +2,14 @@
 'use strict';
 
 const params = new URLSearchParams(location.search);
-const target = params.get('target') || 'https://paypal-secure-login.test/account/signin';
-const reason = params.get('reason') || 'Matched the Sentinel threat-intel list (severity 4 known malicious domain).';
-const domain = params.get('domain') || 'paypal-secure-login.test';
+const rawTarget = params.get('target') || '';
+const target = /^https?:\/\//i.test(rawTarget) ? rawTarget : '';
+const reason = params.get('reason') || 'Matched the Sentinel threat-intel list.';
+const domain = params.get('domain') || '';
 
-document.getElementById('target').textContent = target;
+if (!target) document.getElementById('proceed').disabled = true;
+
+document.getElementById('target').textContent = target || '(unknown address)';
 document.getElementById('reason').textContent =
   reason + (domain ? ` (domain: ${domain})` : '');
 

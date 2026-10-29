@@ -1,4 +1,4 @@
-/* Sentinel — Personal Browser SOC · v0.1.0
+/* Sentinel — Personal Browser SOC
  * Background service worker: event bus, detection engine (M1/M2/M3/M5),
  * alert manager, security scoring, auto-response (warning interstitial).
  * Manifest V3: no persistent globals — in-memory caches are best-effort and
@@ -141,6 +141,7 @@ async function getStore() {
     events: s.events || [],
     sites: s.sites || {},
     whitelist: s.whitelist || [],
+    blocklist: s.blocklist || [],   // user-added threat domains (Settings → Threat intel)
     settings: { ...DEFAULT_SETTINGS, ...(s.settings || {}) },
     stats: s.stats || { installedAt: now(), trackersBlockedTotal: 0 },
     scoreHistory: s.scoreHistory || [],
@@ -150,6 +151,17 @@ async function getStore() {
 async function setStore(patch) {
   await chrome.storage.local.set(patch);
 }
+
+// Every getStore -> modify -> setStore cycle runs through this queue, so
+// concurrent events (e.g. two alerts from one page load) can't overwrite
+// each other's writes.
+let storeQueue = Promise.resolve();
+function serially(task) {
+  const run = storeQueue.then(task);
+  storeQueue = run.catch(() => {});
+  return run;
+}
+const exclusive = (fn) => (...args) => serially(() => fn(...args));
 
 /* ========================= alerts & event feed ========================= */
 
@@ -219,19 +231,48 @@ async function addAlert({ severity, confidence, module, title, detail, url, doma
 
 const chains = new Map(); // tabId -> [urls] (best-effort, in-memory)
 
-chrome.webNavigation.onBeforeNavigate.addListener((details) => {
+function isThreatListed(host, domain, data, store) {
+  const lists = [data.threatlist.domains, store.blocklist];
+  return lists.some(l => l.includes(domain) || l.includes(host));
+}
+
+chrome.webNavigation.onBeforeNavigate.addListener(exclusive(async (details) => {
   if (details.frameId !== 0 || !isHttpUrl(details.url)) return;
   const arr = chains.get(details.tabId) || [];
   arr.push(details.url);
   if (arr.length > 12) arr.shift();
   chains.set(details.tabId, arr);
-});
+
+  // Threat-list hit -> severity 4 + auto-response interstitial (M1).
+  // Checked before the request is sent so the page never loads.
+  let host;
+  try { host = new URL(details.url).hostname.toLowerCase(); } catch (e) { return; }
+  const domain = registrableDomain(host);
+  const [data, store] = await Promise.all([loadData(), getStore()]);
+  if (!isThreatListed(host, domain, data, store)) return;
+
+  const whitelisted = store.whitelist.includes(domain);
+  await addAlert({
+    severity: 4, confidence: 'high', module: 'M1',
+    title: `Threat-listed domain visited: ${domain}`,
+    detail: `Matched the local threat-intel list (${data.threatlist.name}) or your blocklist. ` +
+            (whitelisted ? 'Domain is whitelisted — no interstitial shown.' : 'Warning interstitial shown.'),
+    url: details.url, domain,
+  });
+  if (store.settings.autoBlock && !whitelisted && details.tabId >= 0) {
+    const warnUrl = chrome.runtime.getURL('warning.html') +
+      '?target=' + encodeURIComponent(details.url) +
+      '&reason=' + encodeURIComponent('Matched the Sentinel threat-intel list') +
+      '&domain=' + encodeURIComponent(domain);
+    try { await chrome.tabs.update(details.tabId, { url: warnUrl }); } catch (e) { /* tab gone */ }
+  }
+}));
 
 chrome.webNavigation.onErrorOccurred.addListener((details) => {
   if (details.frameId === 0) chains.delete(details.tabId);
 });
 
-chrome.webNavigation.onCommitted.addListener(async (details) => {
+chrome.webNavigation.onCommitted.addListener(exclusive(async (details) => {
   if (details.frameId !== 0 || !isHttpUrl(details.url)) return;
   const url = new URL(details.url);
   const host = url.hostname;
@@ -255,25 +296,8 @@ chrome.webNavigation.onCommitted.addListener(async (details) => {
 
   const data = await loadData();
 
-  // Threat-list hit -> severity 4 + auto-response interstitial (M1)
-  if (data.threatlist.domains.includes(domain) || data.threatlist.domains.includes(host)) {
-    const whitelisted = store.whitelist.includes(domain);
-    await addAlert({
-      severity: 4, confidence: 'high', module: 'M1',
-      title: `Threat-listed domain visited: ${domain}`,
-      detail: `Matched the local threat-intel list (${data.threatlist.name}). ` +
-              (whitelisted ? 'Domain is whitelisted — no interstitial shown.' : 'Warning interstitial shown.'),
-      url: details.url, domain,
-    });
-    if (store.settings.autoBlock && !whitelisted && details.tabId >= 0) {
-      const warnUrl = chrome.runtime.getURL('warning.html') +
-        '?target=' + encodeURIComponent(details.url) +
-        '&reason=' + encodeURIComponent('Matched the Sentinel threat-intel list') +
-        '&domain=' + encodeURIComponent(domain);
-      try { await chrome.tabs.update(details.tabId, { url: warnUrl }); } catch (e) { /* tab gone */ }
-    }
-    return;
-  }
+  // Threat-list hits are handled in onBeforeNavigate
+  if (isThreatListed(host.toLowerCase(), domain, data, store)) return;
 
   // Punycode / IDN homograph (M1)
   if (isPunycode(host)) {
@@ -300,12 +324,12 @@ chrome.webNavigation.onCommitted.addListener(async (details) => {
   if (url.protocol === 'http:') {
     await addEvent('HYGIENE', 'Page loaded over unencrypted HTTP', { domain, url: details.url });
   }
-});
+}));
 
 /* ================== M3 · headers / mixed content (M3) ================= */
 
 chrome.webRequest.onHeadersReceived.addListener(
-  async (details) => {
+  exclusive(async (details) => {
     if (details.type !== 'main_frame' || !isHttpUrl(details.url)) return;
     const url = new URL(details.url);
     if (url.protocol !== 'https:') return;
@@ -318,14 +342,14 @@ chrome.webRequest.onHeadersReceived.addListener(
     await setStore({ sites: store.sites });
     if (prev === false && hsts) await addEvent('HYGIENE', `HSTS now observed on ${domain}`, { domain });
     else if (hsts === false && prev !== false) await addEvent('HYGIENE', `No HSTS header on ${domain}`, { domain });
-  },
+  }),
   { urls: ['<all_urls>'] },
   ['responseHeaders']
 );
 
 // Mixed content: http subresources on https pages
 chrome.webRequest.onBeforeRequest.addListener(
-  async (details) => {
+  exclusive(async (details) => {
     if (!details.url.startsWith('http://') || details.tabId < 0) return;
     try {
       const tab = await chrome.tabs.get(details.tabId);
@@ -334,7 +358,7 @@ chrome.webRequest.onBeforeRequest.addListener(
         await addEvent('HYGIENE', 'Mixed content: HTTP subresource on HTTPS page', { domain, url: details.url });
       }
     } catch (e) { /* tab gone */ }
-  },
+  }),
   { urls: ['http://*/*'] }
 );
 
@@ -358,41 +382,57 @@ chrome.webRequest.onBeforeRequest.addListener(
     try { host = new URL(details.url).hostname.toLowerCase(); } catch (e) { return; }
     const hit = [...set].some(t => host === t || host.endsWith('.' + t));
     if (!hit) return;
-    try {
-      const tab = await chrome.tabs.get(details.tabId);
-      if (!tab.url || !isHttpUrl(tab.url)) return;
-      const domain = registrableDomain(new URL(tab.url).hostname);
-      const store = await getStore();
-      await touchSite(store, domain, { trackersSeen: (store.sites[domain]?.trackersSeen || 0) + 1 });
-      await setStore({ sites: store.sites });
-    } catch (e) { /* tab gone */ }
+    await serially(async () => {
+      try {
+        const tab = await chrome.tabs.get(details.tabId);
+        if (!tab.url || !isHttpUrl(tab.url)) return;
+        const domain = registrableDomain(new URL(tab.url).hostname);
+        const store = await getStore();
+        await touchSite(store, domain, { trackersSeen: (store.sites[domain]?.trackersSeen || 0) + 1 });
+        await setStore({ sites: store.sites });
+      } catch (e) { /* tab gone */ }
+    });
   },
   { urls: ['<all_urls>'] }
 );
 
-// Count what declarativeNetRequest actually blocked (works for unpacked extensions)
-if (chrome.declarativeNetRequest.onRuleMatchedDebug) {
-  chrome.declarativeNetRequest.onRuleMatchedDebug.addListener(async (info) => {
-    const store = await getStore();
+// Count what declarativeNetRequest actually blocked. Chrome keeps matches for
+// 5 minutes and allows 20 getMatchedRules calls per 10 minutes, so we poll
+// once a minute (see the 'sentinel-dnr' alarm).
+async function collectBlockedTrackers() {
+  const store = await getStore();
+  const since = store.stats.dnrLastPoll || 0;
+  let matched;
+  try {
+    ({ rulesMatchedInfo: matched } = await chrome.declarativeNetRequest.getMatchedRules({ minTimeStamp: since + 1 }));
+  } catch (e) { return; /* quota exceeded or API unavailable; retry next tick */ }
+  if (!matched.length) return;
+
+  const tabDomains = new Map();
+  for (const info of matched) {
     store.stats.trackersBlockedTotal = (store.stats.trackersBlockedTotal || 0) + 1;
-    let domain = '';
-    if (info.tabId >= 0) {
+    store.stats.dnrLastPoll = Math.max(store.stats.dnrLastPoll || 0, info.timeStamp);
+    if (info.tabId < 0) continue;
+    if (!tabDomains.has(info.tabId)) {
+      let domain = '';
       try {
         const tab = await chrome.tabs.get(info.tabId);
         if (tab.url && isHttpUrl(tab.url)) domain = registrableDomain(new URL(tab.url).hostname);
       } catch (e) { /* tab gone */ }
+      tabDomains.set(info.tabId, domain);
     }
+    const domain = tabDomains.get(info.tabId);
     if (domain) {
       await touchSite(store, domain, { trackersBlocked: (store.sites[domain]?.trackersBlocked || 0) + 1 });
     }
-    await setStore({ stats: store.stats, sites: store.sites });
-  });
+  }
+  await setStore({ stats: store.stats, sites: store.sites });
 }
 
 /* ============ content-script messages: M2 phishing, M3, M5 ============= */
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
-  (async () => {
+  serially(async () => {
     if (msg.type === 'FORM_SCAN') {
       await handleFormScan(msg, sender);
     } else if (msg.type === 'FINGERPRINT') {
@@ -417,7 +457,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       return;
     }
     sendResponse({ ok: true });
-  })();
+  });
   return true; // async response
 });
 
@@ -505,8 +545,17 @@ function computeScore(store) {
 
 /* ================================ alarms =============================== */
 
-chrome.alarms.create('sentinel-daily', { periodInMinutes: 60 * 24 });
-chrome.alarms.onAlarm.addListener(async (alarm) => {
+async function ensureAlarms() {
+  if (!(await chrome.alarms.get('sentinel-daily'))) {
+    chrome.alarms.create('sentinel-daily', { periodInMinutes: 60 * 24 });
+  }
+  if (!(await chrome.alarms.get('sentinel-dnr'))) {
+    chrome.alarms.create('sentinel-dnr', { periodInMinutes: 1 });
+  }
+}
+
+chrome.alarms.onAlarm.addListener(exclusive(async (alarm) => {
+  if (alarm.name === 'sentinel-dnr') { await collectBlockedTrackers(); return; }
   if (alarm.name !== 'sentinel-daily') return;
   const store = await getStore();
   const { score } = computeScore(store);
@@ -517,16 +566,16 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
   store.events = store.events.filter(e => e.ts > cutoff);
   await setStore({ scoreHistory: store.scoreHistory, events: store.events });
   await addEvent('SYS', `Daily snapshot: security score ${score}`, {});
-});
+}));
 
 /* ============================ install / boot =========================== */
 
-chrome.runtime.onInstalled.addListener(async (details) => {
+chrome.runtime.onInstalled.addListener(exclusive(async (details) => {
   if (details.reason === 'install') {
     const store = await getStore();
     if (!store.stats.installedAt) store.stats.installedAt = now();
     await setStore({ stats: store.stats });
-    await addEvent('SYS', 'Sentinel SOC v0.1.0 installed — monitoring started', {});
+    await addEvent('SYS', `Sentinel SOC v${chrome.runtime.getManifest().version} installed — monitoring started`, {});
     // ensure tracker ruleset matches settings
     try {
       await chrome.declarativeNetRequest.updateEnabledRulesets({
@@ -534,10 +583,13 @@ chrome.runtime.onInstalled.addListener(async (details) => {
         disableRulesetIds: store.settings.trackerBlocking ? [] : ['sentinel_trackers'],
       });
     } catch (e) { /* DNR feedback permission quirk; non-fatal */ }
+    // First run: open the console, which shows the data-handling disclosure
+    chrome.tabs.create({ url: chrome.runtime.getURL('dashboard.html') });
   }
   // warm the data cache
   loadData().catch(() => {});
-});
+}));
 
-// Warm cache whenever the worker wakes
+// Warm cache and make sure alarms exist whenever the worker wakes
 loadData().catch(() => {});
+ensureAlarms();

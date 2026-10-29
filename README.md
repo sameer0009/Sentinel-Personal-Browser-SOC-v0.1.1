@@ -1,4 +1,4 @@
-# Sentinel — Personal Browser SOC · v0.1.1
+# Sentinel — Personal Browser SOC · v0.1.2
 
 > **Developed by Dev-Hunters Studio**  
 > A single-user Security Operations Center that lives inside your browser. It monitors your browsing, detects threats targeted at you, raises alerts you triage like an analyst, and scores your real-time security posture.
@@ -10,28 +10,28 @@
 ### 1. SOC Console Overview
 The analyst overview features a live **Security Posture Score** ring (Grade A–F), active score deduction audit, a 14-snapshot historical trendline, and a 24-hour sensor activity histogram.
 
-![Sentinel SOC Overview](screenshots/01_overview_dashboard.png)
+![Sentinel SOC Overview](store/assets/screenshot-1-overview.jpg)
 
 ---
 
 ### 2. Alerts Triage Queue
 Triage incidents in real time using analyst response workflows (**Acknowledge**, **Investigating**, **Resolve**, or mark as **False Positive**).
 
-![Alerts Triage Queue](screenshots/02_alerts_triage_queue.png)
+![Alerts Triage Queue](store/assets/screenshot-2-alerts.jpg)
 
 ---
 
 ### 3. Automatic Response Interstitial
 When severity-4 threat-listed domains are encountered, Sentinel intercepts the navigation and serves a high-priority warning card. Analysts can safely retreat or override and whitelist.
 
-![Threat Blocked Interstitial](screenshots/03_threat_blocked_warning.png)
+![Threat Blocked Interstitial](store/assets/screenshot-3-threat-blocked.jpg)
 
 ---
 
 ### 4. Extension Toolbar Popup
 Quickly check open alert counts, total blocked trackers, profiled sites, and the live security gauge directly from the browser action popup.
 
-![Toolbar Action Popup](screenshots/04_toolbar_popup.png)
+![Toolbar Action Popup](store/assets/screenshot-5-popup.jpg)
 
 ---
 
@@ -59,9 +59,10 @@ Quickly check open alert counts, total blocked trackers, profiled sites, and the
 4. Select the `sentinel-soc/` folder
 5. Pin the 🛡️ Sentinel icon to your toolbar and click **Open SOC Console**
 
-### Option B: Packaged Release ZIP
-Pre-packaged ZIP bundles ready for archiving or store submission are located in:
-* `dist/sentinel-soc-v0.1.1.zip` (complete extension bundle with assets, rules, and documentation).
+### Option B: Chrome Web Store package
+Run `./scripts/build.sh` → `dist/sentinel-soc-v<version>.zip` (runtime files only, store-ready).
+Submission copy, permission justifications and reviewer notes live in [`store/`](store/README.md);
+the privacy policy is [`PRIVACY.md`](PRIVACY.md).
 
 ---
 
@@ -72,7 +73,8 @@ Sentinel bundles sample threat indicators using RFC-2606 reserved domains (`.tes
 - **Typosquat Alert**: Visit `http://paypa1.com` or `http://paypal.xyz` (Severity 3, M1)
 - **Punycode / Homograph Alert**: Visit `http://xn--pypal-4ve.com` (Severity 3, M1)
 - **Cleartext Password Warning**: Visit any plain HTTP site with a login form (Severity 3, M3)
-- **Threat-List Interstitial**: Visit `https://paypal-secure-login.test` (Severity 4 auto-response warning page)
+- **Threat-List Interstitial**: Visit `https://paypal-secure-login.test` (Severity 4 auto-response warning page — fires before DNS, so it works even though the domain doesn't resolve)
+- **Personal Blocklist**: Settings → Threat intel → add any domain; visiting it shows the same warning page
 - **Intel Lookup**: Open SOC Console → **Intel Lookup** → paste any URL to run local indicator verdicts
 
 Triage the generated alerts in the console (Acknowledge → Investigating → Resolve) to watch your posture score improve dynamically, then export a sanitized CSV or full JSON dossier from the **Reports** tab.
@@ -93,13 +95,29 @@ sentinel-soc/
 ├── data/                    # Local threat feeds: threatlist.json, brands.json, popular.json, trackers.json
 ├── rules/trackers.json      # DeclarativeNetRequest block ruleset
 ├── icons/                   # Extension icons (16px, 48px, 128px)
-├── screenshots/             # High-resolution screenshots of the console and views
-└── dist/                    # Packaged zip distribution ready for installation/submission
+├── scripts/build.sh         # Builds the store zip (runtime files only)
+├── tools/                   # Dev-only: sample data + real-UI store screenshot generator
+├── store/                   # Store listing copy, reviewer notes, assets (screenshots, promo tiles)
+├── PRIVACY.md               # Privacy policy (host it publicly for the store listing)
+└── dist/                    # Built store package
 ```
 
 ---
 
-## 🚀 Recent Improvements in v0.1.1
+## 🚀 Chrome Web Store readiness (v0.1.2)
+
+- **Fixed**: toolbar popup crashed before listing alerts (`CIRC` undefined).
+- **Fixed**: "Trackers blocked" was always 0 in packed installs (`onRuleMatchedDebug` is unpacked-only) — now uses `getMatchedRules`.
+- **Fixed**: threat-list interstitial never fired for non-resolving domains — now checked in `onBeforeNavigate`.
+- **Fixed**: concurrent alerts overwrote each other in storage (e.g. fingerprinting alert lost on login pages) — writes are now serialized.
+- **Fixed**: canvas-fingerprint reports from early page scripts were dropped (content script now runs at `document_start`).
+- **Fixed**: daily score snapshot never ran (alarm was re-created on every service-worker wake).
+- **Permissions trimmed**: removed `tabs`, removed `web_accessible_resources`, `<all_urls>` → `http/https` only.
+- **Privacy**: first-run data disclosure in the console; stopped collecting unused form-action URLs; added `PRIVACY.md`.
+- **New**: personal blocklist in Settings (store users can't edit `data/threatlist.json`).
+- **Removed** hard-coded demo alerts from shipped code; replaced AI-generated screenshots with captures of the real UI.
+
+## Earlier improvements in v0.1.1
 
 - **CSP-Compliant Injection**: Migrated page-world canvas sensor into native Manifest V3 `world: "MAIN"` content scripts, eliminating CSP violations on strict domains like GitHub and banks.
 - **Multi-Part TLD Support**: Enhanced domain parsing to correctly handle `.co.uk`, `.com.au`, `.co.jp`, `.co.in`, etc.

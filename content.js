@@ -1,5 +1,5 @@
 /* Sentinel SOC · content script (isolated world)
- * - Injects the page-world sensor for canvas-fingerprinting detection
+ * - Relays the page-world (inject.js) canvas-fingerprinting sensor
  * - Scans the DOM for login/password forms (M2/M3 sensors)
  * - Reports notification-permission state per site
  */
@@ -19,16 +19,12 @@
   function scanForms() {
     const pwInputs = [...document.querySelectorAll('input[type="password"]')];
     if (!pwInputs.length) return;
-    const formActions = [...document.querySelectorAll('form')]
-      .map(f => f.action || '')
-      .filter(Boolean)
-      .slice(0, 5);
+    // Only the page title and field count leave the page — never field values.
     chrome.runtime.sendMessage({
       type: 'FORM_SCAN',
       title: document.title || '',
       hasPassword: true,
       passwordCount: pwInputs.length,
-      formActions,
     }).catch(() => {});
   }
 
